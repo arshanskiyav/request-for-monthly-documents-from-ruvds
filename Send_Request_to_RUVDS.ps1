@@ -1,36 +1,41 @@
-﻿<#
+<#
 .SYNOPSIS
   Отправляет в техподдержку RU-VDS запрос закрывающих документов за прошлый месяц.
   Логирует событие и результат.
 
 .PARAMETER From
-  Адрес отправителя на Яндексе.
+  Адрес отправителя.
 
 .PARAMETER To
   Адрес получателя. По умолчанию support@ruvds.com.
 
 .PARAMETER User
-  Логин для SMTP (обычно тот же, что From).
+  Логин для SMTP (по умолчанию совпадает с From).
 
 .PARAMETER AppPassword
-  Пароль приложения Яндекс.Почты.
+  Пароль приложения почтового сервиса.
 
 .PARAMETER LogPath
   Путь к файлу лога.
+
+.PARAMETER SmtpServer
+  Адрес SMTP-сервера. По умолчанию smtp.yandex.ru.
+
+.PARAMETER SmtpPort
+  Порт SMTP-сервера. По умолчанию 587.
 #>
 
 param(
   [Parameter(Mandatory=$true)][string]$From,
   [string]$To = 'support@ruvds.com',
-  [Parameter(Mandatory=$true)][string]$User,
+  [string]$User,
   [Parameter(Mandatory=$true)][string]$AppPassword,
-  [string]$LogPath = "$PSScriptRoot\ruvds-docs.log"
+  [string]$LogPath = "$PSScriptRoot\ruvds-docs.log",
+  [string]$SmtpServer = 'smtp.yandex.ru',
+  [int]$SmtpPort = 587
 )
 
-
-$SMTPServer='smtp.yandex.ru'
-$SMTPPort=587
-
+if (-not $User) { $User = $From }
 
 Add-Type -AssemblyName System.Globalization
 
@@ -44,7 +49,6 @@ try {
   $prev = (Get-Date).AddMonths(-1)
   $ru = [System.Globalization.CultureInfo]::GetCultureInfo('ru-RU')
   $monthTitle = $prev.ToString('MMMM yyyy', $ru)
-  # например: "август 2025"
 
   $Subject = "Запрос закрывающих документов за $monthTitle"
 
@@ -57,20 +61,21 @@ try {
 Спасибо.
 "@
 
-  Write-Log 'Начало отправки. Тема: ''$Subject'' Получатель: $To'
+  Write-Log "Начало отправки. Тема: '$Subject' Получатель: $To"
   $msg = New-Object System.Net.Mail.MailMessage($From, $To, $Subject, $Body)
-  $msg.BodyEncoding = [System.Text.Encoding]::UTF8
+  $msg.BodyEncoding    = [System.Text.Encoding]::UTF8
   $msg.SubjectEncoding = [System.Text.Encoding]::UTF8
   $msg.IsBodyHtml = $false
-  
+
+  # копия себе
   $msg.Bcc.Add($From)
 
-  $smtp = New-Object System.Net.Mail.SmtpClient($SMTPServer, $SMTPPort)
+  $smtp = New-Object System.Net.Mail.SmtpClient($SmtpServer, $SmtpPort)
   $smtp.EnableSsl = $true
   $smtp.Credentials = New-Object System.Net.NetworkCredential($User, $AppPassword)
 
-   $smtp.Send($msg)
-   Write-Log "Успешно отправлено."
+  $smtp.Send($msg)
+  Write-Log "Успешно отправлено."
 }
 catch {
   Write-Log ("Ошибка отправки: " + $_.Exception.Message)
